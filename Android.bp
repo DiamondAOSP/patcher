@@ -1,0 +1,12 @@
+python_binary_host {
+  name: "patcher",
+  version: {
+    py3: {
+      embedded_launcher: true,
+    },
+  },
+  srcs: [
+    "patcher.py",
+    "colors.py"
+  ],
+}
