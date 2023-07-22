@@ -30,20 +30,12 @@ def git_output(*args: str, repo_dir: str) -> str:
     return subprocess.check_output(["git"] + list(args), cwd=repo_dir, encoding="UTF-8").rstrip("\n")
 
 
-def get_current_branch(repo_dir: str) -> str:
-    branch = git_output("rev-parse", "--abbrev-ref", "HEAD", repo_dir=repo_dir)
-    if not branch:
-        raise NotImplementedError("branch is empty")
+def get_upstream_revision(repo_dir: str) -> str:
+    upstream_revision = repo_output("forall", repo_dir, "-c", f"echo $REPO_LREV", repo_dir=repo_dir)
+    if not upstream_revision:
+        raise Error("manifest_revision_id is empty")
 
-    return branch
-
-
-def get_tracked_branch(repo_dir: str) -> str:
-    tracked_branch = git_output("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", repo_dir=repo_dir)
-    if not tracked_branch:
-        raise NotImplementedError("tracked_branch is empty")
-
-    return tracked_branch
+    return upstream_revision
 
 
 def disable_signing(repo_dir: str):
@@ -132,8 +124,8 @@ def rebuild(projects: dict[str, Project], args):
         if os.path.isdir(os.path.join(project.dir, ".git", "rebase-apply")):
             raise NotImplementedError("handle rebases is not implemented")
 
-        tracked_branch = get_tracked_branch(project.dir)
-        print(f"  Tracked branch: {colors.CYAN}{tracked_branch}{colors.RESET}")
+        upstream_revision = get_upstream_revision(project.dir)
+        print(f"  Upstream revision: {colors.CYAN}{upstream_revision}{colors.RESET}")
 
         patches_dir = project.patches_dir
 
@@ -144,7 +136,7 @@ def rebuild(projects: dict[str, Project], args):
         git("format-patch", "--quiet",
             "--no-stat", "--no-numbered", "--zero-commit", "--full-index", "--no-signature",
             "-o", patches_dir,
-            tracked_branch,
+            upstream_revision,
             repo_dir=project.dir)
 
         [print(f"  {colors.CYAN}{file}{colors.RESET}") for file in os.listdir(patches_dir) if file.endswith('.patch')]
@@ -160,10 +152,10 @@ def apply(projects: dict[str, Project], args):
         disable_signing(project.dir)
         repo_start(project.dir)
 
-        tracked_branch = get_tracked_branch(project.dir)
+        upstream_revision = get_upstream_revision(project.dir)
 
-        reset_output = git_output("reset", "--hard", tracked_branch, repo_dir=project.dir)
-        print(f"Reset to {tracked_branch}: " + reset_output)
+        reset_output = git_output("reset", "--hard", upstream_revision, repo_dir=project.dir)
+        print(f"Reset to {upstream_revision}: " + reset_output)
 
         patches = [os.path.abspath(os.path.join(project.patches_dir, p)) for p in os.listdir(project.patches_dir)]
         git("am", "--3way", "--ignore-whitespace", *patches, repo_dir=project.dir)
