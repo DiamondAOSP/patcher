@@ -196,7 +196,15 @@ def rebuild(projects: dict[str, Project], args):
 
 
 def apply(projects: dict[str, Project], args):
-    for project in get_target_projects(projects, args.project):
+    for i, project in enumerate(get_target_projects(projects, args.project)):
+        if i > 0:
+            print()
+
+        if git_output("status", "--porcelain=v1", repo_dir=project.dir) != "":
+            print(
+                f"{colors.RED}There are uncommited changes in {colors.CYAN}{project.name}{colors.RED}, skipping{colors.RESET}")
+            continue
+
         print(f"Applying patches to {colors.CYAN}{project.name}{colors.RESET}")
 
         if os.path.isdir(os.path.join(project.dir, ".git", "rebase-apply")):
@@ -207,13 +215,11 @@ def apply(projects: dict[str, Project], args):
 
         upstream_revision = get_upstream_revision(project.dir)
 
-        reset_output = git_output("reset", "--hard", upstream_revision, repo_dir=project.dir)
+        reset_output = git_output("reset", "--keep", upstream_revision, repo_dir=project.dir)
         print(f"Reset to {upstream_revision}: " + reset_output)
 
         patches = [os.path.abspath(os.path.join(project.patches_dir, p)) for p in os.listdir(project.patches_dir)]
         git("am", "--3way", "--ignore-whitespace", *patches, repo_dir=project.dir)
-
-        print()
 
 
 def main():
