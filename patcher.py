@@ -2,9 +2,11 @@
 
 import argparse
 import os
+import re
 import subprocess
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 import colors
@@ -120,6 +122,52 @@ def init(projects: dict[str, Project], args):
     repo_start(project_dir)
 
 
+@dataclass
+class Patch:
+    project: Project
+    file_name: str
+    feature: str | None
+    message: str
+
+
+def update_readme(projects: dict[str, Project]):
+    patches_readme = os.path.join(projects_dir, "README.md")
+    if os.path.isfile(patches_readme):
+        features: dict[str | None, list[Patch]] = dict()
+
+        for relative_path, project in projects.items():
+            for patch_file_name in os.listdir(project.patches_dir):
+                patch_text = Path(os.path.join(project.patches_dir, patch_file_name)).read_text()
+
+                message = re.search("Subject: \[PATCH\] (.+)$", patch_text, re.MULTILINE).group(1)
+
+                feature_match = re.search(r"Feature: (.+)$", patch_text, re.MULTILINE)
+                feature = feature_match.group(1) if feature_match else None
+
+                features.setdefault(feature, []).append(Patch(project, patch_file_name, feature, message))
+
+        with open(patches_readme, "w") as f:
+            def write_feature(feature: str, patches: list[Patch]):
+                f.write(f"## {feature}\n\n")
+                for patch in patches:
+                    path = f"./{patch.project.name}/{patch.file_name}"
+                    f.write(
+                        f"- [`{patch.project.name}` {patch.message}]({path})\n"
+                    )
+                f.write("\n")
+
+            miscellaneous: list[Patch] | None
+
+            for feature, patches in features.items():
+                if feature is not None:
+                    write_feature(feature, patches)
+                else:
+                    miscellaneous = patches
+
+            if miscellaneous is not None:
+                write_feature("miscellaneous", miscellaneous)
+
+
 def rebuild(projects: dict[str, Project], args):
     for project in get_target_projects(projects, args.project):
         print(f"Rebuilding patches for {colors.CYAN}{project.name}{colors.RESET}")
@@ -143,6 +191,8 @@ def rebuild(projects: dict[str, Project], args):
             repo_dir=project.dir)
 
         [print(f"  {colors.CYAN}{file}{colors.RESET}") for file in os.listdir(patches_dir) if file.endswith('.patch')]
+
+    update_readme(projects)
 
 
 def apply(projects: dict[str, Project], args):
