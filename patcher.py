@@ -16,8 +16,18 @@ def repo(*args: str, repo_dir: str) -> int:
     return subprocess.check_call(["repo"] + list(args), cwd=repo_dir)
 
 
-def repo_output(*args: str, repo_dir: str) -> str:
-    return subprocess.check_output(["repo"] + list(args), cwd=repo_dir, encoding="UTF-8").rstrip("\n")
+def repo_output(*args: str, repo_dir: str, check: bool = True) -> str:
+    data: str
+
+    try:
+        data = subprocess.check_output(["repo"] + list(args), cwd=repo_dir, encoding="UTF-8")
+    except subprocess.CalledProcessError as ex:
+        if check:
+            raise
+        else:
+            data = ex.output
+
+    return data.rstrip("\n")
 
 
 def repo_start(repo_dir: str) -> int:
@@ -220,6 +230,17 @@ def apply(projects: dict[str, Project], args):
 
         patches = [os.path.abspath(os.path.join(project.patches_dir, p)) for p in os.listdir(project.patches_dir)]
         git("am", "--3way", "--ignore-whitespace", *patches, repo_dir=project.dir)
+
+    if not args.project:
+        patched_projects = repo_output(
+            "forall", "-c",
+            "[[ \"$(git rev-parse --abbrev-ref HEAD)\" == \"diamondaosp\" ]] && echo $REPO_PATH",
+            repo_dir=top,
+            check=False).split("\n")
+        no_longer_patched_projects = list(filter(lambda p: not projects.get(p), patched_projects))
+        if no_longer_patched_projects:
+            print(f"Reverting {colors.CYAN}{' '.join(no_longer_patched_projects)}{colors.RESET}")
+            repo("abandon", "--quiet", "diamondaosp", *no_longer_patched_projects, repo_dir=top)
 
 
 def main():
