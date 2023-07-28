@@ -69,6 +69,9 @@ def discover_projects():
     projects = dict[str, Project]()
 
     for patches_dir, _, files in os.walk(projects_dir):
+        if patches_dir == projects_dir:
+            continue
+
         if len(files) <= 0:
             continue
 
